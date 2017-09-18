@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-#[derive(Debug, PartialEq, Hash, Clone)]
+#[derive(Debug, PartialEq, Hash, Clone, Deserialize, Serialize)]
 pub struct Email(String);
 
 impl<'a> From<&'a str> for Email {
@@ -18,10 +18,10 @@ impl fmt::Display for Email {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Person {
     name: String,
-    emails: Vec<Email>,
+    emails: HashSet<Email>,
 }
 
 impl PartialEq<Email> for Person {
@@ -37,22 +37,22 @@ impl Person {
     {
         Person {
             name: name.into(),
-            emails: vec![],
+            emails: HashSet::new(),
         }
     }
 
-    pub fn add_email<E>(&mut self, email: E) -> ()
+    pub fn add_email<E>(&mut self, email: E) -> bool
     where
         E: Into<Email>,
     {
-        self.emails.push(email.into())
+        self.emails.insert(email.into())
     }
 
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn emails(&self) -> &Vec<Email> {
+    pub fn emails(&self) -> &HashSet<Email> {
         &self.emails
     }
 }
@@ -144,6 +144,15 @@ mod tests {
     }
 
     #[test]
+    fn it_does_not_add_duplicted_emails() {
+        let mut person = Person::new("Jane Doe");
+        assert_eq!(person.add_email("jane@example.com"), true);
+        assert_eq!(person.add_email("jane@example.com"), false);
+        assert_eq!(person.add_email("jane2@example.com"), true);
+        assert_eq!(person.emails().len(), 2);
+    }
+
+    #[test]
     fn it_finds_by_email_in_people_database() {
         let mut joe = Person::new("John Doe");
         let mut jane = Person::new("Jane Doe");
@@ -154,8 +163,8 @@ mod tests {
         jane.add_email("doe@example.com");
 
         let mut db = PeopleDatabase::new();
-        db.add_person(joe);
-        db.add_person(jane);
+        assert!(db.add_person(joe).is_ok());
+        assert!(db.add_person(jane).is_ok());
 
         assert_eq!(
             db.find_by_email(&Email::from("john@example.com")).map(
@@ -211,7 +220,6 @@ mod tests {
                 assert_eq!(existing.name(), "John Doe");
                 assert_eq!(email, Email::from("doe@example.com"));
             }
-            _ => panic!("Did not get a ConflictingEmail; got a {:?}", err),
         }
     }
 }

@@ -1,11 +1,19 @@
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_yaml;
 extern crate git2;
 
 mod person;
 use person::*;
 
+mod configuration;
+use configuration::Configuration;
+
+use std::collections::HashMap;
+
 fn main() {
     // Just a technology sample so far
-    match list_people() {
+    match initialize_config() {
         Ok(_) => {}
         Err(err) => {
             println!("Error: {}", err);
@@ -14,14 +22,14 @@ fn main() {
     }
 }
 
-fn list_people() -> Result<(), String> {
+fn initialize_config() -> Result<(), String> {
     let repo = git2::Repository::open_from_env().map_err(
         |_| "Could not open repo",
     )?;
     let mut walker = repo.revwalk().unwrap();
     walker.push_head().expect("Could not push HEAD");
 
-    let mut people = PeopleDatabase::new();
+    let mut people_by_name = HashMap::new();
 
     for oid in walker.flat_map(Result::ok) {
         // The Oid comes from the Revwalker that only yields proper commit Oids. Unwrapping should
@@ -29,27 +37,27 @@ fn list_people() -> Result<(), String> {
         let commit = repo.find_commit(oid).unwrap();
 
         let author = commit.author();
-        if let Some(author_email) = author.email() {
-            let email = Email::from(author_email);
-            if !people.has_email(&email) {
-                let mut person = Person::new(author.name().unwrap_or("(No name)"));
-                person.add_email(email);
-                people.add_person(person).map_err(|err| {
-                    match err {
-                        PeopleDatabaseError::ConflictingEmail { new, existing, email } => {
-                            format!(
-                                "Could not add {new_name} to people database due to conflicting email with {existing_name}. Email that both has: {email}",
-                                new_name = new.name(),
-                                existing_name = existing.name(),
-                                email = email
-                            )
-                        }
-                    }
-                })?;
-            }
+
+        if let (Some(author_name), Some(author_email)) = (author.name(), author.email()) {
+            people_by_name
+                .entry(author_name.to_owned())
+                .or_insert_with(|| Person::new(author_name))
+                .add_email(author_email);
         }
     }
 
+    let configuration =
+        Configuration { people: people_by_name.into_iter().map(|(_, v)| v).collect() };
+
+    println!(
+        "{}",
+        serde_yaml::to_string(&configuration).map_err(|err| {
+            format!("Could not serialize to YAML: {}", err)
+        })?
+    );
+
+    let people = configuration.people_db();
     println!("{:?}", people);
+
     Ok(())
 }
