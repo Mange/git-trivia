@@ -1,6 +1,6 @@
 extern crate indicatif;
 
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 use git2::{Commit, BlameOptions, BlameHunk};
 
 use super::errors::*;
@@ -29,13 +29,17 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
 
     let mut owners: PeopleTracking<OwnershipScore> = PeopleTracking::new();
 
-    let mut blame_options = BlameOptions::new();
+    let mut blame_options = BlameOptions::default();
     blame_options.newest_commit(commit.id());
 
     let total_files = TreeWalker::new(repo, commit.tree()?).count();
     let progress = ProgressBar::new(total_files as u64);
+    progress.set_style(ProgressStyle::default_bar().template(
+        "[{elapsed}] {bar:40.cyan/blue} {pos}/{len} - {wide_msg}",
+    ));
 
     for entry in TreeWalker::new(repo, commit.tree()?) {
+        progress.set_message(&format!("Blaming {}", entry.path().display()));
         if entry.is_file() {
             if !entry.blob(repo).unwrap().is_binary() {
                 let blame = repo.blame_file(entry.path(), Some(&mut blame_options))?;
@@ -48,6 +52,7 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
         progress.inc(1);
     }
 
+    progress.set_message("");
     progress.finish();
 
     for (person, score) in owners.iter() {
