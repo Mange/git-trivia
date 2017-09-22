@@ -1,3 +1,6 @@
+extern crate indicatif;
+
+use indicatif::ProgressBar;
 use git2::{Commit, BlameOptions, BlameHunk};
 
 use super::errors::*;
@@ -29,6 +32,9 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
     let mut blame_options = BlameOptions::new();
     blame_options.newest_commit(commit.id());
 
+    let total_files = TreeWalker::new(repo, commit.tree()?).count();
+    let progress = ProgressBar::new(total_files as u64);
+
     for entry in TreeWalker::new(repo, commit.tree()?) {
         if entry.is_file() {
             if !entry.blob(repo).unwrap().is_binary() {
@@ -39,7 +45,10 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
                 }
             }
         }
+        progress.inc(1);
     }
+
+    progress.finish();
 
     for (person, score) in owners.iter() {
         println!("{} has {} lines", person.name(), score.total_lines_owned);

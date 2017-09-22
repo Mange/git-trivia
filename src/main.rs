@@ -8,6 +8,7 @@ use clap::{AppSettings, SubCommand, Arg, ArgMatches};
 #[macro_use]
 extern crate serde_derive;
 
+extern crate indicatif;
 extern crate serde_yaml;
 extern crate git2;
 use git2::Repository;
