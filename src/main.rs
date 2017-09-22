@@ -86,6 +86,9 @@ fn run() -> Result<()> {
                 .about("Initializes config for repository")
                 .arg(Arg::with_name("dry_run").short("n").long("dry-run").visible_alias("stdout").help(
                     "Don't write generated config file to disk; instead output it on STDOUT.",
+                ))
+                .arg(Arg::with_name("force").short("f").long("force").help(
+                    "Overwrite any existing trivia config file.",
                 )),
         )
         .subcommand(
@@ -109,8 +112,10 @@ fn init(args: &ArgMatches) -> Result<()> {
     let config_file_path = config_file_path(&repo);
     let file_exists = config_file_path.exists();
 
+    let force = args.is_present("force");
+
     if args.is_present("dry_run") {
-        if file_exists {
+        if file_exists && !force {
             eprintln!(
                 "WARNING: Would not write to config file as it already exists: {}",
                 config_file_path.to_string_lossy()
@@ -124,7 +129,7 @@ fn init(args: &ArgMatches) -> Result<()> {
         println!("{}", config_yaml_string);
         Ok(())
     } else {
-        if file_exists {
+        if file_exists && !force {
             bail!(ErrorKind::ConfigFileExists(config_file_path));
         } else {
             let mut file = File::create(&config_file_path)?;
@@ -140,7 +145,6 @@ fn ownership(_args: &ArgMatches) -> Result<()> {
     let context = Context::load()?;
     let head_commit = context.head_commit()?;
 
-    //repo.blame_file
     ownership::calculate(&context, &head_commit)
 }
 
