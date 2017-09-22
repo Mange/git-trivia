@@ -16,6 +16,18 @@ impl<'a> From<&'a str> for Email {
     }
 }
 
+impl From<String> for Email {
+    fn from(string: String) -> Email {
+        Email(string)
+    }
+}
+
+impl<'a> From<&'a String> for Email {
+    fn from(string: &'a String) -> Email {
+        Email(string.clone())
+    }
+}
+
 impl Eq for Email {}
 
 impl fmt::Display for Email {
@@ -86,6 +98,10 @@ impl Person {
 
     pub fn emails(&self) -> &HashSet<Email> {
         &self.emails
+    }
+
+    pub fn has_email(&self, email: &Email) -> bool {
+        self.emails.contains(email)
     }
 }
 

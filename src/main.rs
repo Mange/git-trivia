@@ -26,7 +26,7 @@ use person::*;
 
 mod ownership;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -149,6 +149,7 @@ fn generate_initial_config(repo: &Repository) -> Result<String> {
     walker.push_head().expect("Could not push HEAD");
 
     let mut people_by_name = HashMap::new();
+    let mut emails_without_names: HashSet<String> = HashSet::new();
 
     for oid in walker.flat_map(std::result::Result::ok) {
         // The Oid comes from the Revwalker that only yields proper commit Oids. Unwrapping should
@@ -157,16 +158,38 @@ fn generate_initial_config(repo: &Repository) -> Result<String> {
 
         let author = commit.author();
 
-        if let (Some(author_name), Some(author_email)) = (author.name(), author.email()) {
-            people_by_name
-                .entry(author_name.to_owned())
-                .or_insert_with(|| Person::new(author_name))
-                .add_email(author_email);
+        if let Some(author_email) = author.email() {
+            if let Some(author_name) = author.name() {
+                people_by_name
+                    .entry(author_name.to_owned())
+                    .or_insert_with(|| Person::new(author_name))
+                    .add_email(author_email);
+            } else {
+                emails_without_names.insert(author_email.into());
+            }
         }
     }
 
-    let configuration =
-        Configuration { people: people_by_name.into_iter().map(|(_, v)| v).collect() };
+    // Some of the emails might have gotten matches with names later. Filter those out.
+    emails_without_names.retain(|email| {
+        let email: Email = email.into();
+        !people_by_name.iter().any(
+            |(_, person)| person.has_email(&email),
+        )
+    });
+
+    // The ones that are left will get a name equal to their email address
+    for email in &emails_without_names {
+        people_by_name
+            .entry(email.to_owned())
+            .or_insert_with(|| Person::new(email.to_owned()))
+            .add_email(email);
+    }
+
+    let mut people_list: Vec<Person> = people_by_name.into_iter().map(|(_, v)| v).collect();
+    people_list.sort();
+
+    let configuration = Configuration { people: people_list };
 
     Ok(serde_yaml::to_string(&configuration)?)
 }
