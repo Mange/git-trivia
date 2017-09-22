@@ -1,4 +1,7 @@
 #[macro_use]
+extern crate error_chain;
+
+#[macro_use]
 extern crate clap;
 use clap::{AppSettings, SubCommand, Arg, ArgMatches};
 
@@ -16,7 +19,27 @@ use configuration::Configuration;
 
 use std::collections::HashMap;
 
-fn main() {
+mod errors {
+    error_chain! {
+        errors {
+            ConflictingEmail(name_a: String, name_b: String, email: super::Email) {
+                description("Multiple people with the same email")
+                display(
+                    "Multiple people with the same email: {email} is used by {a} and {b}.\nPlease put this email under only a single person.",
+                    email = email,
+                    a = name_a,
+                    b = name_b
+                )
+            }
+        }
+    }
+}
+
+pub use errors::*;
+
+quick_main!(run);
+
+fn run() -> Result<()> {
     let app = app_from_crate!()
         .about(
             "Calculates fun and useless trivia about your Git repository.",
@@ -39,13 +62,13 @@ fn main() {
         // This should not happen considering SubcommandRequiredElseHelp setting above
         // It would happen if a new subcommand was added but not matched on here.
         _ => std::process::exit(1),
-    };
+    }
 }
 
-fn init(args: &ArgMatches) {
+fn init(args: &ArgMatches) -> Result<()> {
     if args.is_present("dry_run") {
         match initialize_config() {
-            Ok(_) => {}
+            Ok(_) => Ok(()),
             Err(err) => {
                 eprintln!("Error: {}", err);
                 std::process::exit(1);
@@ -57,7 +80,7 @@ fn init(args: &ArgMatches) {
     }
 }
 
-fn initialize_config() -> Result<(), String> {
+fn initialize_config() -> Result<()> {
     let repo = git2::Repository::open_from_env().map_err(
         |_| "Could not open repo",
     )?;
@@ -66,7 +89,7 @@ fn initialize_config() -> Result<(), String> {
 
     let mut people_by_name = HashMap::new();
 
-    for oid in walker.flat_map(Result::ok) {
+    for oid in walker.flat_map(std::result::Result::ok) {
         // The Oid comes from the Revwalker that only yields proper commit Oids. Unwrapping should
         // be safe.
         let commit = repo.find_commit(oid).unwrap();

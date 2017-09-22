@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
+use super::errors::*;
+
 #[derive(Debug, PartialEq, Hash, Clone, Deserialize, Serialize)]
 pub struct Email(String);
 
@@ -63,21 +65,12 @@ pub struct PeopleDatabase {
     lookup: HashMap<Email, usize>,
 }
 
-#[derive(Debug)]
-pub enum PeopleDatabaseError<'db> {
-    ConflictingEmail {
-        new: Person,
-        existing: &'db Person,
-        email: Email,
-    },
-}
-
 impl PeopleDatabase {
     pub fn new() -> PeopleDatabase {
         PeopleDatabase::default()
     }
 
-    pub fn add_person<'db>(&'db mut self, person: Person) -> Result<(), PeopleDatabaseError<'db>> {
+    pub fn add_person<'db>(&'db mut self, person: Person) -> Result<()> {
         // This whole method turns out the be very ugly due to Rusts borrowchecker not being too
         // clever yet. (Non-lexical lifetimes, etc.)
         //
@@ -94,11 +87,12 @@ impl PeopleDatabase {
                 Ok(())
             }
             Some(email) => {
-                Err(PeopleDatabaseError::ConflictingEmail {
-                    existing: self.find_by_email(email).unwrap(),
-                    new: person,
-                    email: email.clone(),
-                })
+                let existing = self.find_by_email(email).unwrap();
+                bail!(ErrorKind::ConflictingEmail(
+                    existing.name().to_string(),
+                    person.name().to_string(),
+                    email.clone(),
+                ));
             }
         }
 
@@ -210,16 +204,9 @@ mod tests {
 
         let err = db.add_person(jane).unwrap_err();
 
-        match err {
-            PeopleDatabaseError::ConflictingEmail {
-                new,
-                existing,
-                email,
-            } => {
-                assert_eq!(new.name(), "Jane Doe");
-                assert_eq!(existing.name(), "John Doe");
-                assert_eq!(email, Email::from("doe@example.com"));
-            }
-        }
+        assert_eq!(
+            err.to_string(),
+            "Multiple people with the same email: doe@example.com is used by John Doe and Jane Doe.\nPlease put this email under only a single person."
+        );
     }
 }
