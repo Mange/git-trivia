@@ -12,16 +12,22 @@ extern crate serde_yaml;
 extern crate git2;
 use git2::Repository;
 
+mod configuration;
+pub use configuration::Configuration;
+
+mod context;
+use context::{Context, config_file_path};
+
 mod person;
 use person::*;
 
-mod configuration;
-use configuration::Configuration;
+mod ownership;
 
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
 use std::io::prelude::*;
+use std::io::BufReader;
 
 mod errors {
     error_chain! {
@@ -39,6 +45,10 @@ mod errors {
             ConfigFileExists(path: ::std::path::PathBuf) {
                 description("Config file already exists")
                 display("Config file already exists: {}", path.display())
+            }
+            ConfigNotFound(path: ::std::path::PathBuf) {
+                description("Config file not found")
+                display("Config file not found in {}.\nHint: Maybe you need to run the \"init\" command first?", path.display())
             }
             ConflictingEmail(name_a: String, name_b: String, email: super::Email) {
                 description("Multiple people with the same email")
@@ -72,22 +82,26 @@ fn run() -> Result<()> {
                 .arg(Arg::with_name("dry_run").short("n").long("dry-run").visible_alias("stdout").help(
                     "Don't write generated config file to disk; instead output it on STDOUT.",
                 )),
+        )
+        .subcommand(
+            SubCommand::with_name("ownership")
+                .about("Calculates line ownership")
         );
     let matches = app.get_matches();
 
-    let repo = Repository::open_from_env()?;
-
     match matches.subcommand() {
-        ("init", Some(args)) => init(args, &repo),
+        ("init", Some(args)) => init(args),
+        ("ownership", Some(args)) => ownership(args),
         // This should not happen considering SubcommandRequiredElseHelp setting above
         // It would happen if a new subcommand was added but not matched on here.
         _ => std::process::exit(1),
     }
 }
 
-fn init(args: &ArgMatches, repo: &Repository) -> Result<()> {
-    let config_yaml_string = generate_initial_config(repo)?;
-    let config_file_path = config_file_path(repo);
+fn init(args: &ArgMatches) -> Result<()> {
+    let repo = Repository::open_from_env()?;
+    let config_yaml_string = generate_initial_config(&repo)?;
+    let config_file_path = config_file_path(&repo);
     let file_exists = config_file_path.exists();
 
     if args.is_present("dry_run") {
@@ -117,8 +131,12 @@ fn init(args: &ArgMatches, repo: &Repository) -> Result<()> {
     }
 }
 
-fn config_file_path(repo: &Repository) -> PathBuf {
-    repo.path().join("trivia.yml")
+fn ownership(_args: &ArgMatches) -> Result<()> {
+    let context = Context::load()?;
+    let head_commit = context.head_commit()?;
+
+    //repo.blame_file
+    ownership::calculate(&context, &head_commit)
 }
 
 fn generate_initial_config(repo: &Repository) -> Result<String> {

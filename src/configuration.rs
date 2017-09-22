@@ -1,6 +1,6 @@
 use person::*;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Configuration {
     pub people: Vec<Person>,
 }
