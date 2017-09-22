@@ -2,13 +2,12 @@ extern crate serde_yaml;
 
 use std::fs::File;
 use std::io::BufReader;
-use std::io::prelude::*;
 use std::path::PathBuf;
 
 use git2::{Commit, Repository};
 
 use super::Configuration;
-use person::{Person, PeopleDatabase};
+use person::PeopleDatabase;
 use super::errors::*;
 
 pub struct Context {

@@ -51,6 +51,10 @@ mod errors {
                 description("Config file not found")
                 display("Config file not found in {}.\nHint: Maybe you need to run the \"init\" command first?", path.display())
             }
+            UnknownEmail(email: super::Email) {
+                description("Unknown email")
+                display("Unknown email: {}\nPlease add it to a person in the configuration file.", email)
+            }
             ConflictingEmail(name_a: String, name_b: String, email: super::Email) {
                 description("Multiple people with the same email")
                 display(

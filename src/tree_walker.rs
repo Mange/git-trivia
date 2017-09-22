@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use git2::{Repository, Tree, TreeEntry, ObjectType, Oid};
+use git2::{Repository, Tree, TreeEntry, ObjectType, Oid, Blob};
 
 pub struct TreeWalker<'repo> {
     repo: &'repo Repository,
@@ -47,6 +47,21 @@ impl Entry {
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn is_dir(&self) -> bool {
+        self.kind == EntryKind::Directory
+    }
+
+    pub fn is_file(&self) -> bool {
+        self.kind == EntryKind::File
+    }
+
+    pub fn blob<'repo>(&self, repo: &'repo Repository) -> Option<Blob<'repo>> {
+        match self.kind {
+            EntryKind::File => repo.find_blob(self.id).ok(),
+            EntryKind::Directory => None,
+        }
     }
 
     fn tree<'repo>(&self, repo: &'repo Repository) -> Option<Tree<'repo>> {

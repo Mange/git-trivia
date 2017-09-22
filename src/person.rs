@@ -1,5 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::cmp::{PartialEq, Eq, Ord, Ordering};
+
+use git2::Signature;
 
 use super::errors::*;
 
@@ -29,6 +33,32 @@ pub struct Person {
 impl PartialEq<Email> for Person {
     fn eq(&self, other: &Email) -> bool {
         self.emails.contains(other)
+    }
+}
+
+impl Hash for Person {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+    }
+}
+
+impl PartialEq for Person {
+    fn eq(&self, rhs: &Person) -> bool {
+        self.name == rhs.name
+    }
+}
+
+impl Eq for Person {}
+
+impl PartialOrd for Person {
+    fn partial_cmp(&self, other: &Person) -> Option<Ordering> {
+        self.name.partial_cmp(&other.name)
+    }
+}
+
+impl Ord for Person {
+    fn cmp(&self, other: &Person) -> Ordering {
+        self.name.cmp(&other.name)
     }
 }
 
@@ -95,18 +125,22 @@ impl PeopleDatabase {
                 ));
             }
         }
-
     }
 
     pub fn has_email(&self, email: &Email) -> bool {
         self.lookup.contains_key(email)
     }
 
-    pub fn find_by_email(&self, email: &Email) -> Option<&Person> {
-        match self.lookup.get(email) {
-            Some(index) => self.people.get(*index),
-            None => None,
-        }
+    pub fn find_by_email(&self, email: &Email) -> Result<&Person> {
+        self.lookup
+            .get(email)
+            .and_then(|index| self.people.get(*index))
+            .ok_or_else(|| ErrorKind::UnknownEmail(email.to_owned()).into())
+    }
+
+    pub fn find_by_signature(&self, signature: Signature) -> Result<&Person> {
+        let email = signature.email().unwrap_or("");
+        self.find_by_email(&email.into())
     }
 
     fn insert_person(&mut self, person: Person) {
@@ -116,6 +150,42 @@ impl PeopleDatabase {
             self.lookup.insert(email.clone(), index);
         }
         self.people.push(person);
+    }
+}
+
+pub struct PeopleTracking<'people, T>
+where
+    T: Default,
+{
+    lookup: HashMap<&'people Person, T>,
+}
+
+impl<'people, T> PeopleTracking<'people, T>
+where
+    T: Default,
+{
+    pub fn new() -> PeopleTracking<'people, T> {
+        PeopleTracking { lookup: HashMap::new() }
+    }
+
+    pub fn for_person(&mut self, person: &'people Person) -> &mut T {
+        self.lookup.entry(person).or_insert_with(Default::default)
+    }
+
+    pub fn iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {
+        self.lookup.iter()
+    }
+}
+
+struct PeopleTrackingIter<'people, T: 'people> {
+    inner: ::std::collections::hash_map::Iter<'people, Person, T>,
+}
+
+impl<'a, T> Iterator for PeopleTrackingIter<'a, T> {
+    type Item = (&'a Person, &'a T);
+
+    fn next(&mut self) -> Option<(&'a Person, &'a T)> {
+        self.inner.next()
     }
 }
 
@@ -161,33 +231,31 @@ mod tests {
         assert!(db.add_person(jane).is_ok());
 
         assert_eq!(
-            db.find_by_email(&Email::from("john@example.com")).map(
-                |p| {
-                    p.name()
-                },
-            ),
-            Some("John Doe")
+            db.find_by_email(&Email::from("john@example.com"))
+                .map(|p| p.name())
+                .unwrap(),
+            "John Doe"
         );
 
         assert_eq!(
-            db.find_by_email(&Email::from("jane@example.com")).map(
-                |p| {
-                    p.name()
-                },
-            ),
-            Some("Jane Doe")
+            db.find_by_email(&Email::from("jane@example.com"))
+                .map(|p| p.name())
+                .unwrap(),
+            "Jane Doe"
         );
 
         assert_eq!(
-            db.find_by_email(&Email::from("doe@example.com")).map(|p| {
-                p.name()
-            }),
-            Some("Jane Doe")
+            db.find_by_email(&Email::from("doe@example.com"))
+                .map(|p| p.name())
+                .unwrap(),
+            "Jane Doe"
         );
 
-        assert!(
+        assert_eq!(
             db.find_by_email(&Email::from("unknown@example.com"))
-                .is_none()
+                .unwrap_err()
+                .to_string(),
+            "Unknown email: unknown@example.com\nPlease add it to a person in the configuration file."
         );
     }
 
