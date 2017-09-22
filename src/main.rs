@@ -18,6 +18,9 @@ pub use configuration::Configuration;
 mod context;
 use context::{Context, config_file_path};
 
+mod tree_walker;
+pub use tree_walker::TreeWalker;
+
 mod person;
 use person::*;
 
@@ -25,9 +28,7 @@ mod ownership;
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::path::PathBuf;
 use std::io::prelude::*;
-use std::io::BufReader;
 
 mod errors {
     error_chain! {
