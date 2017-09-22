@@ -19,18 +19,26 @@ mod configuration;
 use configuration::Configuration;
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::path::PathBuf;
+use std::io::prelude::*;
 
 mod errors {
     error_chain! {
         foreign_links {
             GitError(super::git2::Error);
             YamlError(super::serde_yaml::Error);
+            IoError(super::std::io::Error);
         }
 
         errors {
             NotYetImplemented(feature: &'static str) {
                 description("Not yet implemented")
                 display("{} is not yet implemented. This is still a tech demo.", feature)
+            }
+            ConfigFileExists(path: ::std::path::PathBuf) {
+                description("Config file already exists")
+                display("Config file already exists: {}", path.display())
             }
             ConflictingEmail(name_a: String, name_b: String, email: super::Email) {
                 description("Multiple people with the same email")
@@ -78,14 +86,42 @@ fn run() -> Result<()> {
 }
 
 fn init(args: &ArgMatches, repo: &Repository) -> Result<()> {
+    let config_yaml_string = generate_initial_config(repo)?;
+    let config_file_path = config_file_path(repo);
+    let file_exists = config_file_path.exists();
+
     if args.is_present("dry_run") {
-        initialize_config(repo)
+        if file_exists {
+            eprintln!(
+                "WARNING: Would not write to config file as it already exists: {}",
+                config_file_path.to_string_lossy()
+            );
+        } else {
+            eprintln!(
+                "Would write to this file: {}",
+                config_file_path.to_string_lossy()
+            );
+        }
+        println!("{}", config_yaml_string);
+        Ok(())
     } else {
-        bail!(ErrorKind::NotYetImplemented("Writing config file"))
+        if file_exists {
+            bail!(ErrorKind::ConfigFileExists(config_file_path));
+        } else {
+            let mut file = File::create(&config_file_path)?;
+            file.write_all(config_yaml_string.as_bytes())?;
+            file.write_all(b"\n")?; // Write a trailing newline; that looks so much better
+            eprintln!("Configuration created in {}", config_file_path.display());
+            Ok(())
+        }
     }
 }
 
-fn initialize_config(repo: &Repository) -> Result<()> {
+fn config_file_path(repo: &Repository) -> PathBuf {
+    repo.path().join("trivia.yml")
+}
+
+fn generate_initial_config(repo: &Repository) -> Result<String> {
     let mut walker = repo.revwalk().unwrap();
     walker.push_head().expect("Could not push HEAD");
 
@@ -109,10 +145,5 @@ fn initialize_config(repo: &Repository) -> Result<()> {
     let configuration =
         Configuration { people: people_by_name.into_iter().map(|(_, v)| v).collect() };
 
-    println!("{}", serde_yaml::to_string(&configuration)?);
-
-    let people = configuration.people_db();
-    println!("{:?}", people);
-
-    Ok(())
+    Ok(serde_yaml::to_string(&configuration)?)
 }
