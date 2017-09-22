@@ -1,5 +1,10 @@
 #[macro_use]
+extern crate clap;
+use clap::{AppSettings, SubCommand, Arg, ArgMatches};
+
+#[macro_use]
 extern crate serde_derive;
+
 extern crate serde_yaml;
 extern crate git2;
 
@@ -12,13 +17,43 @@ use configuration::Configuration;
 use std::collections::HashMap;
 
 fn main() {
-    // Just a technology sample so far
-    match initialize_config() {
-        Ok(_) => {}
-        Err(err) => {
-            println!("Error: {}", err);
-            std::process::exit(1);
+    let app = app_from_crate!()
+        .about(
+            "Calculates fun and useless trivia about your Git repository.",
+        )
+        .global_setting(AppSettings::ColoredHelp)
+        .global_setting(AppSettings::VersionlessSubcommands)
+        .setting(AppSettings::SubcommandRequiredElseHelp)
+        .setting(AppSettings::InferSubcommands)
+        .subcommand(
+            SubCommand::with_name("init")
+                .about("Initializes config for repository")
+                .arg(Arg::with_name("dry_run").short("n").long("dry-run").visible_alias("stdout").help(
+                    "Don't write generated config file to disk; instead output it on STDOUT.",
+                )),
+        );
+    let matches = app.get_matches();
+
+    match matches.subcommand() {
+        ("init", Some(args)) => init(args),
+        // This should not happen considering SubcommandRequiredElseHelp setting above
+        // It would happen if a new subcommand was added but not matched on here.
+        _ => std::process::exit(1),
+    };
+}
+
+fn init(args: &ArgMatches) {
+    if args.is_present("dry_run") {
+        match initialize_config() {
+            Ok(_) => {}
+            Err(err) => {
+                eprintln!("Error: {}", err);
+                std::process::exit(1);
+            }
         }
+    } else {
+        eprintln!("Not yet implemented... :(");
+        std::process::exit(1);
     }
 }
 
