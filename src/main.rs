@@ -10,6 +10,7 @@ extern crate serde_derive;
 
 extern crate serde_yaml;
 extern crate git2;
+use git2::Repository;
 
 mod person;
 use person::*;
@@ -21,7 +22,16 @@ use std::collections::HashMap;
 
 mod errors {
     error_chain! {
+        foreign_links {
+            GitError(super::git2::Error);
+            YamlError(super::serde_yaml::Error);
+        }
+
         errors {
+            NotYetImplemented(feature: &'static str) {
+                description("Not yet implemented")
+                display("{} is not yet implemented. This is still a tech demo.", feature)
+            }
             ConflictingEmail(name_a: String, name_b: String, email: super::Email) {
                 description("Multiple people with the same email")
                 display(
@@ -57,33 +67,25 @@ fn run() -> Result<()> {
         );
     let matches = app.get_matches();
 
+    let repo = Repository::open_from_env()?;
+
     match matches.subcommand() {
-        ("init", Some(args)) => init(args),
+        ("init", Some(args)) => init(args, &repo),
         // This should not happen considering SubcommandRequiredElseHelp setting above
         // It would happen if a new subcommand was added but not matched on here.
         _ => std::process::exit(1),
     }
 }
 
-fn init(args: &ArgMatches) -> Result<()> {
+fn init(args: &ArgMatches, repo: &Repository) -> Result<()> {
     if args.is_present("dry_run") {
-        match initialize_config() {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                eprintln!("Error: {}", err);
-                std::process::exit(1);
-            }
-        }
+        initialize_config(repo)
     } else {
-        eprintln!("Not yet implemented... :(");
-        std::process::exit(1);
+        bail!(ErrorKind::NotYetImplemented("Writing config file"))
     }
 }
 
-fn initialize_config() -> Result<()> {
-    let repo = git2::Repository::open_from_env().map_err(
-        |_| "Could not open repo",
-    )?;
+fn initialize_config(repo: &Repository) -> Result<()> {
     let mut walker = repo.revwalk().unwrap();
     walker.push_head().expect("Could not push HEAD");
 
@@ -107,12 +109,7 @@ fn initialize_config() -> Result<()> {
     let configuration =
         Configuration { people: people_by_name.into_iter().map(|(_, v)| v).collect() };
 
-    println!(
-        "{}",
-        serde_yaml::to_string(&configuration).map_err(|err| {
-            format!("Could not serialize to YAML: {}", err)
-        })?
-    );
+    println!("{}", serde_yaml::to_string(&configuration)?);
 
     let people = configuration.people_db();
     println!("{:?}", people);
