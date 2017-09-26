@@ -271,7 +271,7 @@ mod tests {
             db.find_by_email(&Email::from("unknown@example.com"))
                 .unwrap_err()
                 .to_string(),
-            "Unknown email: unknown@example.com\nPlease add it to a person in the configuration file."
+            "Unknown email: \"unknown@example.com\"\nPlease add it to a person in the configuration file."
         );
     }
 

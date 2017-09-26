@@ -54,7 +54,7 @@ mod errors {
             }
             UnknownEmail(email: super::Email) {
                 description("Unknown email")
-                display("Unknown email: {}\nPlease add it to a person in the configuration file.", email)
+                display("Unknown email: \"{}\"\nPlease add it to a person in the configuration file.", email)
             }
             ConflictingEmail(name_a: String, name_b: String, email: super::Email) {
                 description("Multiple people with the same email")
@@ -155,6 +155,7 @@ fn generate_initial_config(repo: &Repository) -> Result<String> {
 
     let mut people_by_name = HashMap::new();
     let mut emails_without_names: HashSet<String> = HashSet::new();
+    let mut seen_emails: HashSet<String> = HashSet::new();
 
     for oid in walker.flat_map(std::result::Result::ok) {
         // The Oid comes from the Revwalker that only yields proper commit Oids. Unwrapping should
@@ -164,13 +165,16 @@ fn generate_initial_config(repo: &Repository) -> Result<String> {
         let author = commit.author();
 
         if let Some(author_email) = author.email() {
-            if let Some(author_name) = author.name() {
-                people_by_name
-                    .entry(author_name.to_owned())
-                    .or_insert_with(|| Person::new(author_name))
-                    .add_email(author_email);
-            } else {
-                emails_without_names.insert(author_email.into());
+            if !seen_emails.contains(author_email) {
+                seen_emails.insert(author_email.into());
+                if let Some(author_name) = author.name() {
+                    people_by_name
+                        .entry(author_name.to_owned())
+                        .or_insert_with(|| Person::new(author_name))
+                        .add_email(author_email);
+                } else {
+                    emails_without_names.insert(author_email.into());
+                }
             }
         }
     }
