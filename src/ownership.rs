@@ -34,7 +34,7 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
     let total_files = TreeWalker::new(repo, commit.tree()?).count();
     let progress = ProgressBar::new(total_files as u64);
     progress.set_style(ProgressStyle::default_bar().template(
-        "[{elapsed}] {bar:40.cyan/blue} {pos}/{len} - {wide_msg}",
+        "[{eta}] {bar:40.cyan/blue} {pos}/{len} - {wide_msg}",
     ));
 
     for entry in TreeWalker::new(repo, commit.tree()?) {
