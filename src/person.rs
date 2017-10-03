@@ -195,16 +195,8 @@ impl<'people, T> PeopleTracking<'people, T>
 where
     T: Default,
 {
-    pub fn new() -> Self {
-        PeopleTracking::default()
-    }
-
     pub fn for_person(&mut self, person: &'people Person) -> &mut T {
         self.lookup.entry(person).or_insert_with(Default::default)
-    }
-
-    pub fn person_value(&self, person: &Person) -> Option<&T> {
-        self.lookup.get(person)
     }
 
     pub fn total_people(&self) -> usize {
@@ -221,7 +213,7 @@ pub struct TeamTracking<'people, T>
 where
     T: Default,
 {
-    no_team: T,
+    no_team_value: T,
     lookup: HashMap<&'people str /* team_name */, T>,
 }
 
@@ -229,10 +221,6 @@ impl<'people, T> TeamTracking<'people, T>
 where
     T: Default,
 {
-    pub fn new() -> Self {
-        TeamTracking::default()
-    }
-
     pub fn for_person(&mut self, person: &'people Person) -> &mut T {
         match person.team_name() {
             Some(name) => self.for_team_name(name),
@@ -247,15 +235,7 @@ where
     }
 
     pub fn for_no_team(&mut self) -> &mut T {
-        &mut self.no_team
-    }
-
-    pub fn team_value(&self, team_name: &str) -> Option<&T> {
-        self.lookup.get(team_name)
-    }
-
-    pub fn no_team_value(&self) -> &T {
-        &self.no_team
+        &mut self.no_team_value
     }
 
     pub fn total_teams(&self) -> usize {
@@ -265,7 +245,7 @@ where
     pub fn iter(&self) -> TeamTrackingIter<T> {
         TeamTrackingIter {
             emitted_no_team: false,
-            no_team_value: self.no_team_value(),
+            no_team_value: &self.no_team_value,
             inner: self.lookup.iter(),
         }
     }
@@ -316,18 +296,6 @@ where
     {
         func(self.people_tracking.for_person(person));
         func(self.team_tracking.for_person(person));
-    }
-
-    pub fn person_value(&self, person: &Person) -> Option<&T> {
-        self.people_tracking.person_value(person)
-    }
-
-    pub fn team_value(&self, team_name: &str) -> Option<&T> {
-        self.team_tracking.team_value(team_name)
-    }
-
-    pub fn no_team_value(&self) -> &T {
-        self.team_tracking.no_team_value()
     }
 
     pub fn people_tracking(&self) -> &PeopleTracking<'people, T> {
@@ -456,7 +424,7 @@ mod tests {
         let joe = Person::new("John Doe");
         let jane = Person::new("Jane Doe");
 
-        let mut people_tracking: PeopleTracking<Stub> = PeopleTracking::new();
+        let mut people_tracking: PeopleTracking<Stub> = PeopleTracking::default();
 
         people_tracking.for_person(&joe).incr();
         assert_eq!(people_tracking.for_person(&joe).current(), 1);
@@ -488,14 +456,14 @@ mod tests {
         jane.set_team_name(None);
         let jane = jane;
 
-        let mut team_tracking: TeamTracking<Stub> = TeamTracking::new();
+        let mut team_tracking: TeamTracking<Stub> = TeamTracking::default();
 
         team_tracking.for_person(&joe).incr();
         team_tracking.for_person(&jane).incr();
 
         assert_eq!(team_tracking.for_person(&joe).current(), 1);
         assert_eq!(team_tracking.for_person(&jane).current(), 1);
-        assert_eq!(team_tracking.no_team_value().current(), 1);
+        assert_eq!(team_tracking.no_team_value.current(), 1);
     }
 
     #[test]
@@ -525,9 +493,18 @@ mod tests {
         tracking.track_person(&jane, |e| e.incr());
         tracking.track_person(&jane, |e| e.incr());
 
-        assert_eq!(tracking.person_value(&joe), Some(&Stub { counter: 1 }));
-        assert_eq!(tracking.person_value(&jane), Some(&Stub { counter: 2 }));
-        assert_eq!(tracking.team_value("Team 1"), Some(&Stub { counter: 1 }));
-        assert_eq!(tracking.no_team_value(), &Stub { counter: 2 });
+        assert_eq!(
+            tracking.people_tracking.lookup.get(&joe),
+            Some(&Stub { counter: 1 })
+        );
+        assert_eq!(
+            tracking.people_tracking.lookup.get(&jane),
+            Some(&Stub { counter: 2 })
+        );
+        assert_eq!(
+            tracking.team_tracking.lookup.get("Team 1"),
+            Some(&Stub { counter: 1 })
+        );
+        assert_eq!(tracking.team_tracking.no_team_value, Stub { counter: 2 });
     }
 }
