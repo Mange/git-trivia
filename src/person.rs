@@ -183,7 +183,7 @@ impl PeopleDatabase {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PeopleTracking<'people, T>
 where
     T: Default,
@@ -196,11 +196,15 @@ where
     T: Default,
 {
     pub fn new() -> Self {
-        PeopleTracking { lookup: HashMap::new() }
+        PeopleTracking::default()
     }
 
     pub fn for_person(&mut self, person: &'people Person) -> &mut T {
         self.lookup.entry(person).or_insert_with(Default::default)
+    }
+
+    pub fn person_value(&self, person: &Person) -> Option<&T> {
+        self.lookup.get(person)
     }
 
     pub fn iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {
@@ -208,7 +212,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TeamTracking<'people, T>
 where
     T: Default,
@@ -222,10 +226,7 @@ where
     T: Default,
 {
     pub fn new() -> Self {
-        TeamTracking {
-            lookup: HashMap::new(),
-            no_team: T::default(),
-        }
+        TeamTracking::default()
     }
 
     pub fn for_person(&mut self, person: &'people Person) -> &mut T {
@@ -243,6 +244,10 @@ where
 
     pub fn for_no_team(&mut self) -> &mut T {
         &mut self.no_team
+    }
+
+    pub fn team_value(&self, team_name: &str) -> Option<&T> {
+        self.lookup.get(team_name)
     }
 
     pub fn no_team_value(&self) -> &T {
@@ -277,6 +282,52 @@ impl<'a, T> Iterator for TeamTrackingIter<'a, T> {
                 None => None,
             }
         }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct CombinedTracking<'people, T>
+where
+    T: Default,
+{
+    people_tracking: PeopleTracking<'people, T>,
+    team_tracking: TeamTracking<'people, T>,
+}
+
+impl<'people, T> CombinedTracking<'people, T>
+where
+    T: Default,
+{
+    pub fn new() -> Self {
+        CombinedTracking::default()
+    }
+
+    pub fn track_person<F>(&mut self, person: &'people Person, mut func: F)
+    where
+        F: FnMut(&mut T),
+    {
+        func(self.people_tracking.for_person(person));
+        func(self.team_tracking.for_person(person));
+    }
+
+    pub fn person_value(&self, person: &Person) -> Option<&T> {
+        self.people_tracking.person_value(person)
+    }
+
+    pub fn team_value(&self, team_name: &str) -> Option<&T> {
+        self.team_tracking.team_value(team_name)
+    }
+
+    pub fn no_team_value(&self) -> &T {
+        self.team_tracking.no_team_value()
+    }
+
+    pub fn people_iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {
+        self.people_tracking.iter()
+    }
+
+    pub fn team_iter(&self) -> TeamTrackingIter<T> {
+        self.team_tracking.iter()
     }
 }
 
@@ -423,13 +474,44 @@ mod tests {
 
         let mut team_tracking: TeamTracking<Stub> = TeamTracking::new();
 
-        println!("{:?}", team_tracking);
         team_tracking.for_person(&joe).incr();
         team_tracking.for_person(&jane).incr();
 
-        println!("{:?}", team_tracking);
         assert_eq!(team_tracking.for_person(&joe).current(), 1);
         assert_eq!(team_tracking.for_person(&jane).current(), 1);
         assert_eq!(team_tracking.no_team_value().current(), 1);
+    }
+
+    #[test]
+    fn it_tracks_combined_teams_and_people() {
+        #[derive(PartialEq, Eq, Debug, Default)]
+        struct Stub {
+            counter: i32,
+        };
+
+        impl Stub {
+            fn incr(&mut self) {
+                self.counter += 1;
+            }
+        }
+
+        let mut joe = Person::new("John Doe");
+        joe.set_team_name(String::from("Team 1"));
+        let joe = joe;
+
+        let mut jane = Person::new("Jane Doe");
+        jane.set_team_name(None);
+        let jane = jane;
+
+        let mut tracking: CombinedTracking<Stub> = CombinedTracking::new();
+
+        tracking.track_person(&joe, |e| e.incr());
+        tracking.track_person(&jane, |e| e.incr());
+        tracking.track_person(&jane, |e| e.incr());
+
+        assert_eq!(tracking.person_value(&joe), Some(&Stub { counter: 1 }));
+        assert_eq!(tracking.person_value(&jane), Some(&Stub { counter: 2 }));
+        assert_eq!(tracking.team_value("Team 1"), Some(&Stub { counter: 1 }));
+        assert_eq!(tracking.no_team_value(), &Stub { counter: 2 });
     }
 }
