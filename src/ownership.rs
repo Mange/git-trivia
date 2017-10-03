@@ -1,5 +1,3 @@
-extern crate indicatif;
-
 use indicatif::{ProgressBar, ProgressStyle};
 use git2::{Commit, BlameOptions, BlameHunk};
 
@@ -40,13 +38,11 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
 
     for entry in TreeWalker::new(repo, commit.tree()?) {
         progress.set_message(&format!("Blaming {}", entry.path().display()));
-        if entry.is_file() {
-            if !entry.blob(repo).unwrap().is_binary() {
-                let blame = repo.blame_file(entry.path(), Some(&mut blame_options))?;
-                for hunk in blame.iter() {
-                    let person = people_db.find_by_signature(hunk.orig_signature())?;
-                    owners.for_person(&person).add_hunk(&hunk);
-                }
+        if entry.is_file() && !entry.blob(repo).unwrap().is_binary() {
+            let blame = repo.blame_file(entry.path(), Some(&mut blame_options))?;
+            for hunk in blame.iter() {
+                let person = people_db.find_by_signature(hunk.orig_signature())?;
+                owners.for_person(person).add_hunk(&hunk);
             }
         }
         progress.inc(1);

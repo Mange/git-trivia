@@ -116,7 +116,7 @@ impl PeopleDatabase {
         PeopleDatabase::default()
     }
 
-    pub fn add_person<'db>(&'db mut self, person: Person) -> Result<()> {
+    pub fn add_person(&mut self, person: Person) -> Result<()> {
         // This whole method turns out the be very ugly due to Rusts borrowchecker not being too
         // clever yet. (Non-lexical lifetimes, etc.)
         //
@@ -190,18 +190,6 @@ where
 
     pub fn iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {
         self.lookup.iter()
-    }
-}
-
-struct PeopleTrackingIter<'people, T: 'people> {
-    inner: ::std::collections::hash_map::Iter<'people, Person, T>,
-}
-
-impl<'a, T> Iterator for PeopleTrackingIter<'a, T> {
-    type Item = (&'a Person, &'a T);
-
-    fn next(&mut self) -> Option<(&'a Person, &'a T)> {
-        self.inner.next()
     }
 }
 

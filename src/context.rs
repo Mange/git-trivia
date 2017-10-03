@@ -12,7 +12,6 @@ use super::errors::*;
 
 pub struct Context {
     repository: Repository,
-    config: Configuration,
     people_db: PeopleDatabase,
 }
 
@@ -24,11 +23,10 @@ impl Context {
     pub fn load() -> Result<Context> {
         let repo = Repository::open_from_env()?;
         let config = load_configuration(&repo)?;
-        let people_db = config.people_db();
+        let people_db = config.people_db()?;
 
         Ok(Context {
             repository: repo,
-            config: config,
             people_db: people_db,
         })
     }

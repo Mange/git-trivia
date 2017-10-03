@@ -129,16 +129,14 @@ fn init(args: &ArgMatches) -> Result<()> {
         }
         println!("{}", config_yaml_string);
         Ok(())
+    } else if file_exists && !force {
+        bail!(ErrorKind::ConfigFileExists(config_file_path));
     } else {
-        if file_exists && !force {
-            bail!(ErrorKind::ConfigFileExists(config_file_path));
-        } else {
-            let mut file = File::create(&config_file_path)?;
-            file.write_all(config_yaml_string.as_bytes())?;
-            file.write_all(b"\n")?; // Write a trailing newline; that looks so much better
-            eprintln!("Configuration created in {}", config_file_path.display());
-            Ok(())
-        }
+        let mut file = File::create(&config_file_path)?;
+        file.write_all(config_yaml_string.as_bytes())?;
+        file.write_all(b"\n")?; // Write a trailing newline; that looks so much better
+        eprintln!("Configuration created in {}", config_file_path.display());
+        Ok(())
     }
 }
 

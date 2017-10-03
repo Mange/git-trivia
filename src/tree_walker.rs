@@ -27,9 +27,7 @@ impl Entry {
         let kind = match tree_entry.kind() {
             Some(ObjectType::Tree) => EntryKind::Directory,
             Some(ObjectType::Blob) => EntryKind::File,
-            _ => {
-                unreachable!("Tree entries should always be either Trees or Blobs");
-            }
+            _ => unreachable!("Tree entries should always be either Trees or Blobs"),
         };
 
         let path = path.join(tree_entry.name().unwrap());
@@ -87,7 +85,7 @@ impl<'repo> Iterator for TreeWalker<'repo> {
     type Item = Entry;
 
     fn next(&mut self) -> Option<Entry> {
-        if self.cursor_stack.len() == 0 {
+        if self.cursor_stack.is_empty() {
             return None;
         }
 

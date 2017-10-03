@@ -1,4 +1,5 @@
 use person::*;
+use super::errors::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Configuration {
@@ -6,11 +7,11 @@ pub struct Configuration {
 }
 
 impl Configuration {
-    pub fn people_db(&self) -> PeopleDatabase {
+    pub fn people_db(&self) -> Result<PeopleDatabase> {
         let mut db = PeopleDatabase::new();
-        for person in self.people.iter() {
-            db.add_person((*person).clone());
+        for person in &self.people {
+            db.add_person((*person).clone())?;
         }
-        db
+        Ok(db)
     }
 }
