@@ -3,7 +3,7 @@ use git2::{Commit, BlameOptions, BlameHunk};
 
 use super::errors::*;
 use super::{TreeWalker, Context};
-use person::PeopleTracking;
+use person::{PeopleTracking, TeamTracking};
 
 struct OwnershipScore {
     total_lines_owned: u32,
@@ -26,6 +26,7 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
     let repo = context.repo();
 
     let mut owners: PeopleTracking<OwnershipScore> = PeopleTracking::new();
+    let mut team_owners: TeamTracking<OwnershipScore> = TeamTracking::new();
 
     let mut blame_options = BlameOptions::default();
     blame_options.newest_commit(commit.id());
@@ -43,6 +44,7 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
             for hunk in blame.iter() {
                 let person = people_db.find_by_signature(hunk.orig_signature())?;
                 owners.for_person(person).add_hunk(&hunk);
+                team_owners.for_person(person).add_hunk(&hunk);
             }
         }
         progress.inc(1);
@@ -51,8 +53,22 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
     progress.set_message("");
     progress.finish();
 
+    println!("\n-- People --");
     for (person, score) in owners.iter() {
         println!("{} has {} lines", person.name(), score.total_lines_owned);
+    }
+
+    println!("\n-- Teams --");
+    for (team_name, score) in team_owners.iter() {
+        match team_name {
+            Some(name) => println!("{} has {} lines", name, score.total_lines_owned),
+            None => {
+                println!(
+                    "{} lines is owned by no team in particular",
+                    score.total_lines_owned
+                )
+            }
+        }
     }
 
     Ok(())

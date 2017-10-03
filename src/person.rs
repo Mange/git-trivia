@@ -106,6 +106,10 @@ impl Person {
         &self.name
     }
 
+    pub fn team_name(&self) -> Option<&str> {
+        self.team_name.as_ref().map(String::as_ref)
+    }
+
     pub fn emails(&self) -> &HashSet<Email> {
         &self.emails
     }
@@ -179,6 +183,7 @@ impl PeopleDatabase {
     }
 }
 
+#[derive(Debug)]
 pub struct PeopleTracking<'people, T>
 where
     T: Default,
@@ -190,7 +195,7 @@ impl<'people, T> PeopleTracking<'people, T>
 where
     T: Default,
 {
-    pub fn new() -> PeopleTracking<'people, T> {
+    pub fn new() -> Self {
         PeopleTracking { lookup: HashMap::new() }
     }
 
@@ -200,6 +205,78 @@ where
 
     pub fn iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {
         self.lookup.iter()
+    }
+}
+
+#[derive(Debug)]
+pub struct TeamTracking<'people, T>
+where
+    T: Default,
+{
+    no_team: T,
+    lookup: HashMap<&'people str /* team_name */, T>,
+}
+
+impl<'people, T> TeamTracking<'people, T>
+where
+    T: Default,
+{
+    pub fn new() -> Self {
+        TeamTracking {
+            lookup: HashMap::new(),
+            no_team: T::default(),
+        }
+    }
+
+    pub fn for_person(&mut self, person: &'people Person) -> &mut T {
+        match person.team_name() {
+            Some(name) => self.for_team_name(name),
+            None => self.for_no_team(),
+        }
+    }
+
+    pub fn for_team_name(&mut self, team_name: &'people str) -> &mut T {
+        self.lookup.entry(team_name).or_insert_with(
+            Default::default,
+        )
+    }
+
+    pub fn for_no_team(&mut self) -> &mut T {
+        &mut self.no_team
+    }
+
+    pub fn no_team_value(&self) -> &T {
+        &self.no_team
+    }
+
+    pub fn iter(&self) -> TeamTrackingIter<T> {
+        TeamTrackingIter {
+            emitted_no_team: false,
+            no_team_value: self.no_team_value(),
+            inner: self.lookup.iter(),
+        }
+    }
+}
+
+pub struct TeamTrackingIter<'a, T: 'a> {
+    emitted_no_team: bool,
+    no_team_value: &'a T,
+    inner: ::std::collections::hash_map::Iter<'a, &'a str, T>,
+}
+
+impl<'a, T> Iterator for TeamTrackingIter<'a, T> {
+    type Item = (Option<&'a str>, &'a T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if !self.emitted_no_team {
+            self.emitted_no_team = true;
+            Some((None, self.no_team_value))
+        } else {
+            match self.inner.next() {
+                Some((name, value)) => Some((Some(name), value)),
+                None => None,
+            }
+        }
     }
 }
 
@@ -290,5 +367,69 @@ mod tests {
             err.to_string(),
             "Multiple people with the same email: doe@example.com is used by John Doe and Jane Doe.\nPlease put this email under only a single person."
         );
+    }
+
+    #[test]
+    fn it_tracks_people() {
+        #[derive(PartialEq, Eq, Debug, Default)]
+        struct Stub {
+            counter: i32,
+        };
+
+        impl Stub {
+            fn incr(&mut self) {
+                self.counter += 1;
+            }
+
+            fn current(&self) -> i32 {
+                self.counter
+            }
+        }
+
+        let joe = Person::new("John Doe");
+        let jane = Person::new("Jane Doe");
+
+        let mut people_tracking: PeopleTracking<Stub> = PeopleTracking::new();
+
+        people_tracking.for_person(&joe).incr();
+        assert_eq!(people_tracking.for_person(&joe).current(), 1);
+        assert_eq!(people_tracking.for_person(&jane).current(), 0);
+    }
+
+    #[test]
+    fn it_tracks_teams() {
+        #[derive(PartialEq, Eq, Debug, Default)]
+        struct Stub {
+            counter: i32,
+        };
+
+        impl Stub {
+            fn incr(&mut self) {
+                self.counter += 1;
+            }
+
+            fn current(&self) -> i32 {
+                self.counter
+            }
+        }
+
+        let mut joe = Person::new("John Doe");
+        joe.set_team_name(String::from("Team 1"));
+        let joe = joe;
+
+        let mut jane = Person::new("Jane Doe");
+        jane.set_team_name(None);
+        let jane = jane;
+
+        let mut team_tracking: TeamTracking<Stub> = TeamTracking::new();
+
+        println!("{:?}", team_tracking);
+        team_tracking.for_person(&joe).incr();
+        team_tracking.for_person(&jane).incr();
+
+        println!("{:?}", team_tracking);
+        assert_eq!(team_tracking.for_person(&joe).current(), 1);
+        assert_eq!(team_tracking.for_person(&jane).current(), 1);
+        assert_eq!(team_tracking.no_team_value().current(), 1);
     }
 }
