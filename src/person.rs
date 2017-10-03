@@ -40,6 +40,8 @@ impl fmt::Display for Email {
 pub struct Person {
     name: String,
     emails: HashSet<Email>,
+    #[serde(rename = "team")]
+    team_name: Option<String>,
 }
 
 impl PartialEq<Email> for Person {
@@ -75,14 +77,22 @@ impl Ord for Person {
 }
 
 impl Person {
-    pub fn new<S>(name: S) -> Person
+    pub fn new<S>(name: S) -> Self
     where
         S: Into<String>,
     {
         Person {
             name: name.into(),
             emails: HashSet::new(),
+            team_name: None,
         }
+    }
+
+    pub fn set_team_name<S>(&mut self, name: S)
+    where
+        S: Into<Option<String>>,
+    {
+        self.team_name = name.into();
     }
 
     pub fn add_email<E>(&mut self, email: E) -> bool
