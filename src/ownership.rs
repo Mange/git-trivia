@@ -5,6 +5,7 @@ use super::errors::*;
 use super::{TreeWalker, Context};
 use person::CombinedTracking;
 
+#[derive(Debug, Serialize)]
 pub struct OwnershipScore {
     pub total_lines_owned: u32,
 }

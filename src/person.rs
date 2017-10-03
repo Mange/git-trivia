@@ -207,6 +207,10 @@ where
         self.lookup.get(person)
     }
 
+    pub fn total_people(&self) -> usize {
+        self.lookup.len()
+    }
+
     pub fn iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {
         self.lookup.iter()
     }
@@ -252,6 +256,10 @@ where
 
     pub fn no_team_value(&self) -> &T {
         &self.no_team
+    }
+
+    pub fn total_teams(&self) -> usize {
+        self.lookup.len()
     }
 
     pub fn iter(&self) -> TeamTrackingIter<T> {
@@ -320,6 +328,14 @@ where
 
     pub fn no_team_value(&self) -> &T {
         self.team_tracking.no_team_value()
+    }
+
+    pub fn people_tracking(&self) -> &PeopleTracking<'people, T> {
+        &self.people_tracking
+    }
+
+    pub fn team_tracking(&self) -> &TeamTracking<'people, T> {
+        &self.team_tracking
     }
 
     pub fn people_iter(&self) -> ::std::collections::hash_map::Iter<&Person, T> {

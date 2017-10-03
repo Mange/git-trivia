@@ -9,9 +9,12 @@ use clap::{AppSettings, SubCommand, Arg, ArgMatches};
 extern crate serde_derive;
 
 extern crate indicatif;
+extern crate serde_json;
 extern crate serde_yaml;
 extern crate git2;
 use git2::Repository;
+
+mod formatters;
 
 mod configuration;
 pub use configuration::Configuration;
@@ -35,6 +38,7 @@ mod errors {
     error_chain! {
         foreign_links {
             GitError(super::git2::Error);
+			JsonError(super::serde_json::Error);
             YamlError(super::serde_yaml::Error);
             IoError(super::std::io::Error);
         }
@@ -82,6 +86,19 @@ fn run() -> Result<()> {
         .global_setting(AppSettings::VersionlessSubcommands)
         .setting(AppSettings::SubcommandRequiredElseHelp)
         .setting(AppSettings::InferSubcommands)
+        .arg(
+            Arg::with_name("format")
+                .short("F")
+                .long("format")
+                .visible_alias("formatter")
+                .takes_value(true)
+                .global(true)
+                .possible_values(formatters::POSSIBLE_VALUES)
+                .default_value("console")
+                .help(
+                    "Set the output format of this action."
+                )
+        )
         .subcommand(
             SubCommand::with_name("init")
                 .about("Initializes config for repository")
@@ -140,31 +157,14 @@ fn init(args: &ArgMatches) -> Result<()> {
     }
 }
 
-fn ownership(_args: &ArgMatches) -> Result<()> {
+fn ownership(args: &ArgMatches) -> Result<()> {
+    let format = formatters::from_args(args)?;
+
     let context = Context::load()?;
     let head_commit = context.head_commit()?;
 
     let owners = ownership::calculate(&context, &head_commit)?;
-
-    println!("\n-- People --");
-    for (person, score) in owners.people_iter() {
-        println!("{} has {} lines", person.name(), score.total_lines_owned);
-    }
-
-    println!("\n-- Teams --");
-    for (team_name, score) in owners.team_iter() {
-        match team_name {
-            Some(name) => println!("{} has {} lines", name, score.total_lines_owned),
-            None => {
-                println!(
-                    "{} lines is owned by no team in particular",
-                    score.total_lines_owned
-                )
-            }
-        }
-    }
-
-    Ok(())
+    format.display(&owners)
 }
 
 fn generate_initial_config(repo: &Repository) -> Result<String> {
