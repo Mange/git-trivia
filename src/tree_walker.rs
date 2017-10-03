@@ -116,17 +116,3 @@ impl<'repo> Iterator for TreeWalker<'repo> {
         }
     }
 }
-
-#[test]
-fn it_iterates_all_files() {
-    let context = super::Context::load().unwrap();
-    let tree = context.head_commit().unwrap().tree().unwrap();
-
-    let walker = TreeWalker::new(context.repo(), tree);
-
-    for entry in walker {
-        // If this fails with a panic the output will be shown, but not otherwise. This makes for a
-        // good debugging message.
-        println!("{:?}", entry);
-    }
-}
