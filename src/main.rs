@@ -144,7 +144,27 @@ fn ownership(_args: &ArgMatches) -> Result<()> {
     let context = Context::load()?;
     let head_commit = context.head_commit()?;
 
-    ownership::calculate(&context, &head_commit)
+    let owners = ownership::calculate(&context, &head_commit)?;
+
+    println!("\n-- People --");
+    for (person, score) in owners.people_iter() {
+        println!("{} has {} lines", person.name(), score.total_lines_owned);
+    }
+
+    println!("\n-- Teams --");
+    for (team_name, score) in owners.team_iter() {
+        match team_name {
+            Some(name) => println!("{} has {} lines", name, score.total_lines_owned),
+            None => {
+                println!(
+                    "{} lines is owned by no team in particular",
+                    score.total_lines_owned
+                )
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn generate_initial_config(repo: &Repository) -> Result<String> {

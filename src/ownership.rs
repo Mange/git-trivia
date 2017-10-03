@@ -5,8 +5,8 @@ use super::errors::*;
 use super::{TreeWalker, Context};
 use person::CombinedTracking;
 
-struct OwnershipScore {
-    total_lines_owned: u32,
+pub struct OwnershipScore {
+    pub total_lines_owned: u32,
 }
 
 impl Default for OwnershipScore {
@@ -21,7 +21,10 @@ impl OwnershipScore {
     }
 }
 
-pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
+pub fn calculate<'context>(
+    context: &'context Context,
+    commit: &Commit,
+) -> Result<CombinedTracking<'context, OwnershipScore>> {
     let people_db = context.people_db();
     let repo = context.repo();
 
@@ -51,23 +54,5 @@ pub fn calculate(context: &Context, commit: &Commit) -> Result<()> {
     progress.set_message("");
     progress.finish();
 
-    println!("\n-- People --");
-    for (person, score) in owners.people_iter() {
-        println!("{} has {} lines", person.name(), score.total_lines_owned);
-    }
-
-    println!("\n-- Teams --");
-    for (team_name, score) in owners.team_iter() {
-        match team_name {
-            Some(name) => println!("{} has {} lines", name, score.total_lines_owned),
-            None => {
-                println!(
-                    "{} lines is owned by no team in particular",
-                    score.total_lines_owned
-                )
-            }
-        }
-    }
-
-    Ok(())
+    Ok(owners)
 }
