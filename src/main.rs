@@ -8,10 +8,16 @@ use clap::{AppSettings, SubCommand, Arg, ArgMatches};
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+extern crate prettytable;
+
+extern crate git2;
 extern crate indicatif;
 extern crate serde_json;
 extern crate serde_yaml;
-extern crate git2;
+extern crate term;
+extern crate terminal_size;
+
 use git2::Repository;
 
 mod formatters;
@@ -41,6 +47,7 @@ mod errors {
 			JsonError(super::serde_json::Error);
             YamlError(super::serde_yaml::Error);
             IoError(super::std::io::Error);
+            TerminalError(super::term::Error);
         }
 
         errors {

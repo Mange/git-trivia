@@ -139,7 +139,7 @@ pub fn calculate<'context>(
     }
 
     progress.set_message("");
-    progress.finish();
+    progress.finish_and_clear();
 
     Ok(OwnershipStatistics::from_tracking(owners))
 }
