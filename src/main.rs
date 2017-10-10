@@ -223,7 +223,12 @@ fn generate_initial_config(repo: &Repository) -> Result<String> {
     let mut people_list: Vec<Person> = people_by_name.into_iter().map(|(_, v)| v).collect();
     people_list.sort();
 
-    let configuration = Configuration { people: people_list };
+    let head_sha = repo.head()?.resolve()?.target().unwrap().to_string();
+
+    let configuration = Configuration {
+        people: people_list,
+        generated_at_sha: head_sha,
+    };
 
     Ok(serde_yaml::to_string(&configuration)?)
 }

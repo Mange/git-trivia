@@ -3,6 +3,7 @@ use super::errors::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Configuration {
+    pub generated_at_sha: String,
     pub people: Vec<Person>,
 }
 
