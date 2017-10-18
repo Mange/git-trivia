@@ -49,7 +49,7 @@ impl Context {
     }
 }
 
-fn load_configuration(repo: &Repository) -> Result<Configuration> {
+pub fn load_configuration(repo: &Repository) -> Result<Configuration> {
     let path = config_file_path(repo);
     if path.exists() {
         let file = File::open(path)?;

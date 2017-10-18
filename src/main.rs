@@ -18,12 +18,12 @@ extern crate serde_yaml;
 extern crate term;
 extern crate terminal_size;
 
-use git2::Repository;
+use git2::{Repository, Oid};
 
 mod formatters;
 
 mod configuration;
-pub use configuration::Configuration;
+pub use configuration::{Configuration, ConfigurationBuilder};
 
 mod context;
 use context::{Context, config_file_path};
@@ -36,7 +36,6 @@ use person::*;
 
 mod ownership;
 
-use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -108,12 +107,19 @@ fn run() -> Result<()> {
         )
         .subcommand(
             SubCommand::with_name("init")
-                .about("Initializes config for repository")
+                .about("Initializes a new config for repository.")
                 .arg(Arg::with_name("dry_run").short("n").long("dry-run").visible_alias("stdout").help(
                     "Don't write generated config file to disk; instead output it on STDOUT.",
                 ))
                 .arg(Arg::with_name("force").short("f").long("force").help(
                     "Overwrite any existing trivia config file.",
+                )),
+        )
+        .subcommand(
+            SubCommand::with_name("update")
+                .about("Update config for repository")
+                .arg(Arg::with_name("dry_run").short("n").long("dry-run").visible_alias("stdout").help(
+                    "Don't write generated config file to disk; instead output it on STDOUT.",
                 )),
         )
         .subcommand(
@@ -124,6 +130,7 @@ fn run() -> Result<()> {
 
     match matches.subcommand() {
         ("init", Some(args)) => init(args),
+        ("update", Some(args)) => update(args),
         ("ownership", Some(args)) => ownership(args),
         // This should not happen considering SubcommandRequiredElseHelp setting above
         // It would happen if a new subcommand was added but not matched on here.
@@ -164,6 +171,34 @@ fn init(args: &ArgMatches) -> Result<()> {
     }
 }
 
+fn update(args: &ArgMatches) -> Result<()> {
+    let repo = Repository::open_from_env()?;
+    let config = context::load_configuration(&repo)?;
+    if config.generated_at_sha == current_head_sha(&repo)? {
+        eprintln!("Config already up to date.");
+        Ok(())
+    } else {
+        let config_file_path = config_file_path(&repo);
+        let new_config_yaml_string = update_config(&repo, config).chain_err(
+            || "Could not update config",
+        )?;
+        if args.is_present("dry_run") {
+            eprintln!(
+                "Would write to this file: {}",
+                config_file_path.to_string_lossy()
+            );
+            println!("{}", new_config_yaml_string);
+            Ok(())
+        } else {
+            let mut file = File::create(&config_file_path)?;
+            file.write_all(new_config_yaml_string.as_bytes())?;
+            file.write_all(b"\n")?; // Write a trailing newline; that looks so much better
+            eprintln!("Configuration updated in {}", config_file_path.display());
+            Ok(())
+        }
+    }
+}
+
 fn ownership(args: &ArgMatches) -> Result<()> {
     let format = formatters::from_args(args)?;
 
@@ -175,60 +210,53 @@ fn ownership(args: &ArgMatches) -> Result<()> {
 }
 
 fn generate_initial_config(repo: &Repository) -> Result<String> {
+    let mut config_builder = ConfigurationBuilder::new();
     let mut walker = repo.revwalk().unwrap();
-    walker.push_head().expect("Could not push HEAD");
 
-    let mut people_by_name = HashMap::new();
-    let mut emails_without_names: HashSet<String> = HashSet::new();
-    let mut seen_emails: HashSet<String> = HashSet::new();
+    config_builder.set_latest_commit_sha(current_head_sha(repo)?);
 
-    for oid in walker.flat_map(std::result::Result::ok) {
-        // The Oid comes from the Revwalker that only yields proper commit Oids. Unwrapping should
-        // be safe.
-        let commit = repo.find_commit(oid).unwrap();
-
-        let author = commit.author();
-
-        if let Some(author_email) = author.email() {
-            if !seen_emails.contains(author_email) {
-                seen_emails.insert(author_email.into());
-                if let Some(author_name) = author.name() {
-                    people_by_name
-                        .entry(author_name.to_owned())
-                        .or_insert_with(|| Person::new(author_name))
-                        .add_email(author_email);
-                } else {
-                    emails_without_names.insert(author_email.into());
-                }
-            }
-        }
-    }
-
-    // Some of the emails might have gotten matches with names later. Filter those out.
-    emails_without_names.retain(|email| {
-        let email: Email = email.into();
-        !people_by_name.iter().any(
-            |(_, person)| person.has_email(&email),
-        )
+    walker.push_head()?;
+    let commits = walker.flat_map(std::result::Result::ok).flat_map(|oid| {
+        repo.find_commit(oid)
     });
 
-    // The ones that are left will get a name equal to their email address
-    for email in &emails_without_names {
-        people_by_name
-            .entry(email.to_owned())
-            .or_insert_with(|| Person::new(email.to_owned()))
-            .add_email(email);
+    for commit in commits {
+        config_builder.add_author(commit.author());
     }
 
-    let mut people_list: Vec<Person> = people_by_name.into_iter().map(|(_, v)| v).collect();
-    people_list.sort();
-
-    let head_sha = repo.head()?.resolve()?.target().unwrap().to_string();
-
-    let configuration = Configuration {
-        people: people_list,
-        generated_at_sha: head_sha,
-    };
+    let configuration = config_builder.into_configuration()?;
 
     Ok(serde_yaml::to_string(&configuration)?)
+}
+
+fn update_config(repo: &Repository, configuration: Configuration) -> Result<String> {
+    let old_head = configuration.generated_at_sha.clone();
+
+    let mut config_builder = ConfigurationBuilder::from_existing(configuration);
+    let mut walker = repo.revwalk().unwrap();
+
+    config_builder.set_latest_commit_sha(current_head_sha(repo)?);
+
+    walker.push_head()?;
+    let old_head_oid = Oid::from_str(&old_head).chain_err(
+        || "Could not parse generated_at_sha configuration SHA",
+    )?;
+
+    walker.hide(old_head_oid)?;
+
+    let commits = walker.flat_map(std::result::Result::ok).flat_map(|oid| {
+        repo.find_commit(oid)
+    });
+
+    for commit in commits {
+        config_builder.add_author(commit.author());
+    }
+
+    let configuration = config_builder.into_configuration()?;
+
+    Ok(serde_yaml::to_string(&configuration)?)
+}
+
+fn current_head_sha(repo: &Repository) -> Result<String> {
+    Ok(repo.head()?.resolve()?.target().unwrap().to_string())
 }

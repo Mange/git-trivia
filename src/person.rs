@@ -36,6 +36,26 @@ impl fmt::Display for Email {
     }
 }
 
+impl ::std::ops::Deref for Email {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<Email> for String {
+    fn from(email: Email) -> String {
+        email.0
+    }
+}
+
+impl<'a> From<&'a Email> for String {
+    fn from(email: &'a Email) -> String {
+        email.0.clone()
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Person {
     name: String,
@@ -128,6 +148,10 @@ pub struct PeopleDatabase {
 impl PeopleDatabase {
     pub fn new() -> PeopleDatabase {
         PeopleDatabase::default()
+    }
+
+    pub fn len(&self) -> usize {
+        self.people.len()
     }
 
     pub fn add_person(&mut self, person: Person) -> Result<()> {
